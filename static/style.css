@@ -1,0 +1,116 @@
+/* === Base === */
+:root {
+  --bg: #f9fafb;
+  --text: #111827;
+  --card-bg: #ffffff;
+  --accent: #2563eb;
+}
+
+.dark {
+  --bg: #111827;
+  --text: #e5e7eb;
+  --card-bg: #1f2937;
+  --accent: #3b82f6;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+/* === Layout === */
+.container {
+  max-width: 960px;
+  margin: 20px auto;
+  padding: 16px;
+}
+
+.card {
+  background: var(--card-bg);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+/* === Buttons === */
+button {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+button:hover {
+  opacity: 0.9;
+}
+
+input, select {
+  padding: 8px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  margin-right: 6px;
+}
+
+/* === Tables === */
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  border-bottom: 1px solid #e5e7eb;
+  padding: 8px 12px;
+}
+
+.dark table th,
+.dark table td {
+  border-color: #374151;
+}
+
+/* === Links === */
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* === Dark mode transition === */
+html {
+  transition: background-color 0.3s, color 0.3s;
+}
+
+.dark body {
+  background-color: var(--bg);
+  color: var(--text);
+}
+
+/* === Navbar === */
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--card-bg);
+  padding: 10px 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.navbar a {
+  margin-right: 12px;
+  color: var(--text);
+}
+
+.navbar button {
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 18px;
+}

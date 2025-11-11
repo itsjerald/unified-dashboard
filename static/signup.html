@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Create Account</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-50 text-gray-800 dark:bg-gray-900 dark:text-gray-200 flex flex-col items-center justify-center h-screen">
+
+  <div class="p-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg w-80">
+    <h2 class="text-xl font-semibold mb-4 text-center">🧾 Create Account</h2>
+
+    <form id="signupForm" class="flex flex-col gap-3" novalidate>
+      <input id="email" type="text" placeholder="Email (e.g. user@example.com)"
+             class="border p-2 rounded dark:bg-gray-700 dark:border-gray-600" required>
+      <input id="password" type="password" placeholder="Password"
+             class="border p-2 rounded dark:bg-gray-700 dark:border-gray-600" required>
+      <button type="submit"
+              class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+        Sign Up
+      </button>
+    </form>
+
+    <div id="out" class="text-center text-sm mt-3"></div>
+
+    <p class="text-sm mt-3 text-center">
+      Already have an account?
+      <a href="/login.html" class="text-blue-500 hover:underline">Login</a>
+    </p>
+  </div>
+
+  <script>
+    // ✅ If already logged in, redirect away
+    async function checkSession() {
+      const res = await fetch("/auth/me", { credentials: "include" });
+      const user = await res.json();
+      if (user.authenticated) {
+        window.location.href = "/dashboard.html";
+      }
+    }
+    checkSession();
+
+    // ✅ Signup handler
+    document.getElementById("signupForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value.trim();
+      const out = document.getElementById("out");
+
+      if (!email || !password) {
+        out.textContent = "⚠️ Please enter both email and password.";
+        return;
+      }
+
+      try {
+        // ⚙️ Call your backend signup/register route
+        const res = await fetch("/auth/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          out.textContent = "❌ " + (data.detail || "Failed to create account");
+          return;
+        }
+
+        // ✅ Success
+        out.innerHTML = `
+          ✅ Account created successfully!<br>
+          <a href="/login.html" class="text-blue-500 hover:underline">Click here to login</a>.
+        `;
+        document.getElementById("signupForm").reset();
+
+      } catch (err) {
+        out.textContent = "⚠️ Network error. Try again.";
+      }
+    });
+  </script>
+
+</body>
+</html>

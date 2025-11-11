@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Login</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-50 text-gray-800 dark:bg-gray-900 dark:text-gray-200 flex flex-col items-center justify-center h-screen">
+
+  <div class="p-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg w-80">
+    <h2 class="text-xl font-semibold mb-4 text-center">🔐 Login</h2>
+
+    <form id="loginForm" class="flex flex-col gap-3" novalidate>
+      <input id="email" type="text" placeholder="Email (e.g. admin@example.com)"
+             class="border p-2 rounded dark:bg-gray-700 dark:border-gray-600" required>
+      <input id="password" type="password" placeholder="Password"
+             class="border p-2 rounded dark:bg-gray-700 dark:border-gray-600" required>
+      <button type="submit"
+              class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+        Login
+      </button>
+    </form>
+
+    <p class="text-sm mt-3 text-center">
+      Don't have an account?
+      <a href="/signup.html" class="text-blue-500 hover:underline">Create Account</a>
+    </p>
+
+    <div id="out" class="text-center text-sm mt-3"></div>
+  </div>
+
+  <script>
+    // ✅ Redirect if already logged in
+    async function checkSession() {
+      const res = await fetch("/auth/me", { credentials: "include" });
+      const user = await res.json();
+      if (user.authenticated) {
+        if (user.first_login) {
+          window.location.href = "/change-password.html";
+        } else {
+          window.location.href = "/dashboard.html";
+        }
+      }
+    }
+    checkSession();
+
+    // ✅ Handle login
+    document.getElementById("loginForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value.trim();
+      const out = document.getElementById("out");
+
+      if (!email || !password) {
+        out.textContent = "⚠️ Please enter both email and password.";
+        return;
+      }
+
+      try {
+        const res = await fetch("/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ email, password })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          out.textContent = "❌ " + (data.detail || "Invalid credentials");
+          return;
+        }
+
+        // ✅ Redirect based on backend cookie
+        if (document.cookie.includes("force_change_pw=1")) {
+          window.location.href = "/change-password.html";
+        } else {
+          window.location.href = "/dashboard.html";
+        }
+      } catch (err) {
+        out.textContent = "⚠️ Network error. Try again.";
+      }
+    });
+  </script>
+
+</body>
+</html>

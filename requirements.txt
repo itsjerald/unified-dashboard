@@ -1,0 +1,17 @@
+fastapi
+uvicorn[standard]
+sqlmodel
+passlib[argon2]
+python-jose[cryptography]
+python-multipart
+pyotp
+pydantic
+argon2-cffi
+qrcode
+pillow
+email-validator
+pydantic[email]
+pdfplumber
+jinja2
+pandas
+aiofiles
