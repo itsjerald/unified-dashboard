@@ -1,12 +1,13 @@
 services:
   - type: web
-    name: unified-dashboard
+    name: gpay-fastapi
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port 10000
     envVars:
-      - key: SECRET_KEY
-        generateValue: true
-      - key: ACCESS_TOKEN_EXPIRE_MINUTES
-        value: 120
-    autoDeploy: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: gpaydb
+          property: connectionString
+databases:
+  - name: gpaydb
