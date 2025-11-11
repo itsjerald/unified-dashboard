@@ -5,7 +5,7 @@ DATABASE_URL = os.environ.get('DATABASE_URL', 'sqlite:///./gpay.db')
 engine = create_engine(DATABASE_URL, echo=False)
 
 def init_db():
-    from app import models
+    print(f"Using database: {DATABASE_URL}")
     SQLModel.metadata.create_all(engine)
 
 def get_session():
