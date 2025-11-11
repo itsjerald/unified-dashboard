@@ -1,0 +1,39 @@
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environment
+venv/
+.venv/
+env/
+ENV/
+
+# VSCode and PyCharm settings
+.vscode/
+.idea/
+
+# Environment variables and secrets
+.env
+*.env
+
+# Local database files
+*.db
+*.sqlite3
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Build and dist files
+build/
+dist/
+*.egg-info/
+
+# __pycache__ inside app folders
+app/**/__pycache__/
