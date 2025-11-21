@@ -1,12 +1,12 @@
 # app/api/summary.py
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Depends, HTTPException
 from datetime import datetime, timedelta
 from sqlmodel import Session, select
 from sqlalchemy import func
-from app.db import engine
+from app.db import engine, get_session
 from app.auth import get_current_user
-from app.models import Transaction, Payment
+from app.models import Transaction, Payment, User
 
 router = APIRouter()
 
@@ -54,3 +54,24 @@ def mark_paid(request: Request, payload: dict):
         session.commit()
 
     return {"marked": updated}
+
+@router.get("/admin/summary")
+def get_summary(
+    start_date: datetime,
+    end_date: datetime,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session)
+):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+    total = session.exec(
+        select(func.sum(Transaction.amount))
+        .join(User)
+        .where(
+            User.parent_id == current_user.id,
+            Transaction.shared == True,
+            Transaction.date.between(start_date, end_date)
+        )
+        .where(User.parent_id == current_user.id, User.family_id == current_user.family_id)
+    ).one_or_none()
+    return {"total": float(total[0]) if total and total[0] else 0}
