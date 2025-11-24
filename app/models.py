@@ -76,3 +76,12 @@ class Family(SQLModel, table=True):
 
 class TxnShareRequest(SQLModel):
     txn_ids: List[int]
+
+class DeletionRequest(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    entity_type: str  # "user" or "family"
+    entity_id: int
+    requested_by_id: int = Field(foreign_key="user.id")
+    approval_ids: List[int] = Field(default_factory=list, sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    executed: bool = Field(default=False)
