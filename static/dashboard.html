@@ -57,8 +57,10 @@
         <button onclick="showSection('summary')" class="nav-btn">📋 Summary</button>
         <button onclick="showSection('charts')" class="nav-btn">📊 Charts</button>
         <button onclick="showSection('transactions')" class="nav-btn">💵 Transactions</button>
+        <button onclick="showSection('review')" class="nav-btn">🕵️ Review & Share</button>
         <hr class="border-gray-700 my-3">
         <button onclick="showSection('admin')" class="nav-btn">🛠 Admin Dashboard</button>
+        <button onclick="showSection('pendingDeletions')" class="nav-btn" id="pendingDeletionsTab" style="display:none;">🗂 Pending Deletions</button>
         <button onclick="showSection('categories')" class="nav-btn">📂 Categories & Rules</button>
         <button onclick="showSection('users')" id="usersTab" class="nav-btn hidden">👥 Users</button>
         <hr class="border-gray-700 my-3">
@@ -126,6 +128,23 @@
         <h2 class="text-xl font-semibold mb-3">Admin System Overview</h2>
         <div id="adminStats" class="text-sm"></div>
       </section>
+      <section id="pendingDeletions" class="page hidden">
+      <h2 class="text-xl font-semibold mb-3">Pending Deletion Requests</h2>
+      <table class="w-full border text-sm dark:border-gray-700">
+        <thead class="bg-gray-100 dark:bg-gray-800">
+          <tr>
+            <th class="border px-2 py-1">Type</th>
+            <th class="border px-2 py-1">ID</th>
+            <th class="border px-2 py-1">Requested By</th>
+            <th class="border px-2 py-1">Approvals</th>
+            <th class="border px-2 py-1">Status</th>
+            <th class="border px-2 py-1">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="deletionTable"></tbody>
+      </table>
+    </section>
+
 
       <section id="categories" class="page hidden">
         <h2 class="text-xl font-semibold mb-3">Manage Categories</h2>
@@ -184,6 +203,31 @@
           <tbody id="usersTable"></tbody>
         </table>
       </section>
+
+        <section id="review" class="page hidden">
+  <h2 class="text-xl font-semibold mb-3">Review Uploaded Transactions</h2>
+  <table class="w-full border text-sm dark:border-gray-700 mb-4">
+    <thead class="bg-gray-100 dark:bg-gray-800">
+      <tr>
+        <th class="border px-2 py-1">Date</th>
+        <th class="border px-2 py-1">Merchant</th>
+        <th class="border px-2 py-1">Amount</th>
+        <th class="border px-2 py-1">Category</th>
+        <th class="border px-2 py-1">Delete</th>
+        <th class="border px-2 py-1">Select</th>
+      </tr>
+    </thead>
+    <tbody id="reviewTable"></tbody>
+  </table>
+  <div class="flex items-center gap-3">
+    <label for="parentSelect" class="text-sm font-medium">Share With Parent:</label>
+    <select id="parentSelect" class="border rounded dark:bg-gray-700 dark:border-gray-600"></select>
+    <button onclick="shareSelected()" class="bg-blue-600 text-white px-4 py-2 rounded">Share</button>
+    <button onclick="showSection('home')" class="bg-gray-600 text-white px-4 py-2 rounded">Share Later</button>
+  </div>
+  <div id="shareResult" class="mt-3 text-sm"></div>
+</section>
+
     </main>
   </div>
 
@@ -389,15 +433,19 @@
         return;
       }
 
-      // ✅ Inside checkLogin(), after verifying authenticated:
-    if (user.first_login) {
-      window.location.href = "/change-password.html";
-      return;
-    }
+       // ✅ Inside checkLogin(), after verifying authenticated:
+        if (user.first_login) {
+          window.location.href = "/change-password.html";
+          return;
+        }
 
-    if (user.role === "admin") {
-          document.getElementById("usersTab").classList.remove("hidden");
-        } else {
+        if (user.role === "admin") {
+              document.getElementById("usersTab").classList.remove("hidden");
+        }
+        else if (user.role === "superadmin") {
+          document.getElementById("pendingDeletionsTab").style.display = "";
+        }
+        else {
           // Hide admin-only buttons for normal users
           document.querySelector("button[onclick=\"showSection('admin')\"]").classList.add("hidden");
           document.querySelector("button[onclick=\"showSection('categories')\"]").classList.add("hidden");
@@ -464,6 +512,107 @@
       await fetch("/auth/logout", { method: "POST", credentials: "include" });
       window.location.href = "/login.html";
     }
+
+
+      async function loadReviewTable() {
+      // Get current user's unshared uploaded transactions
+      const txns = await fetch("/api/transactions/pending_review", { credentials: "include" }).then(r => r.json());
+      document.getElementById("reviewTable").innerHTML = txns.map(t =>
+        `<tr>
+          <td class="border px-2 py-1">${t.date.split('T')[0]}</td>
+          <td class="border px-2 py-1">${t.merchant ?? ''}</td>
+          <td class="border px-2 py-1">₹${t.amount}</td>
+          <td class="border px-2 py-1">${t.category ?? ''}</td>
+          <td class="border px-2 py-1"><button onclick="deleteTxn(${t.id})" class="bg-red-500 text-white px-2 py-1 rounded">Delete</button></td>
+          <td class="border px-2 py-1"><input type="checkbox" class="share-checkbox" value="${t.id}"></td>
+        </tr>`
+      ).join('');
+    }
+
+    async function deleteTxn(id) {
+      if (!confirm("Delete this transaction?")) return;
+      await fetch(`/api/transactions/${id}`, { method: "DELETE", credentials: "include" });
+      loadReviewTable();
+    }
+
+    // Fetch possible parents (admins in your family)
+    async function loadParentSelect() {
+      const res = await fetch("/api/users/parents", { credentials: "include" });
+      const parents = await res.json();
+      const sel = document.getElementById("parentSelect");
+      sel.innerHTML = parents.map(p =>
+        `<option value="${p.id}">${p.email}</option>`
+      ).join('');
+    }
+
+    async function shareSelected() {
+      const ids = Array.from(document.querySelectorAll('.share-checkbox:checked')).map(cb => Number(cb.value));
+      const parentId = document.getElementById("parentSelect").value;
+      if (!ids.length) return alert("Select at least one transaction.");
+      const res = await fetch("/api/transactions/share", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, parent_id: parentId })
+      });
+      const result = await res.json();
+      document.getElementById("shareResult").textContent = `✅ Shared ${result.shared.length} transactions with parent.`;
+      loadReviewTable();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      // Load table & parent options when section is shown
+      document.querySelector('button[onclick="showSection(\'review\')"]').addEventListener('click', () => {
+        loadReviewTable();
+        loadParentSelect();
+        document.getElementById("shareResult").textContent = "";
+      });
+    });
+
+
+
+    // Load pending deletions
+    async function loadPendingDeletions() {
+      const res = await fetch("/api/admin/pending_deletions", { credentials: "include" });
+      if (!res.ok) {
+        document.getElementById("deletionTable").innerHTML = '<tr><td colspan="6" class="text-center text-red-500">Access denied or error loading requests.</td></tr>';
+        return;
+      }
+      const deletions = await res.json();
+      document.getElementById("deletionTable").innerHTML =
+        deletions.length === 0
+        ? '<tr><td colspan="6" class="text-center">No pending requests.</td></tr>'
+        : deletions.map(d =>
+          `<tr>
+            <td class="border px-2 py-1">${d.entity_type}</td>
+            <td class="border px-2 py-1">${d.entity_id}</td>
+            <td class="border px-2 py-1">${d.requested_by_email}</td>
+            <td class="border px-2 py-1">${d.approval_emails ? d.approval_emails.join(', ') : ''}</td>
+            <td class="border px-2 py-1">${d.executed ? '<span class="text-green-600">Completed</span>' : 'Pending'}</td>
+            <td class="border px-2 py-1">
+              ${!d.executed && d.can_approve
+                ? `<button onclick="approveDelete(${d.id})" class="bg-blue-600 text-white px-2 py-1 rounded mr-2">Approve</button>`
+                : ''}
+            </td>
+          </tr>`
+        ).join('');
+    }
+
+    async function approveDelete(id) {
+      if (!confirm("Approve this deletion?")) return;
+      const res = await fetch(`/api/admin/approve_delete/${id}`, {
+        method: "POST",
+        credentials: "include"
+      });
+      if (res.ok) {
+        alert("Approval registered.");
+        loadPendingDeletions();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert("Error: " + (err.detail || "Could not approve"));
+      }
+    }
+
 
     checkLogin();
     showSection("home");
