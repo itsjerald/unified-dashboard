@@ -3,7 +3,7 @@ from fastapi import APIRouter, Request, HTTPException
 from sqlmodel import Session, select
 from app.db import engine
 from app.models import Category, MerchantRule
-from app.api.admin.common import require_admin
+from app.api.admin.common import require_admin, require_parent_or_spouse
 
 router = APIRouter()
 
@@ -12,9 +12,9 @@ router = APIRouter()
 # -------------------------------
 @router.get("/categories")
 def get_categories(request: Request):
-    require_admin(request)
+    user = require_parent_or_spouse(request)
     with Session(engine) as session:
-        rows = session.exec(select(Category)).all()
+        rows = session.exec(select(Category).where(Category.family_id == user.family_id)).all()
     return [{"id": c.id, "name": c.name} for c in rows]
 
 
@@ -23,7 +23,7 @@ def get_categories(request: Request):
 # -------------------------------
 @router.post("/categories")
 def create_category(request: Request, payload: dict):
-    require_admin(request)
+    require_parent_or_spouse(request)
     name = payload.get("name")
     if not name:
         raise HTTPException(status_code=400, detail="name required")
@@ -41,7 +41,7 @@ def create_category(request: Request, payload: dict):
 # -------------------------------
 @router.delete("/categories/{cat_id}")
 def delete_category(request: Request, cat_id: int):
-    require_admin(request)
+    require_parent_or_spouse(request)
     with Session(engine) as session:
         cat = session.get(Category, cat_id)
         if not cat:
