@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Superadmin Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-800">
+  <aside class="w-64 bg-gray-900 text-white float-left h-screen p-4">
+    <h2 class="text-xl font-bold mb-4">Superadmin</h2>
+    <nav>
+      <button onclick="showSection('overview')">🌐 Overview</button>
+      <button onclick="showSection('admins')">👑 Manage Admins</button>
+      <button onclick="showSection('families')">🏠 Families</button>
+      <button onclick="showSection('users')">👥 All Users</button>
+      <button onclick="showSection('audit')">📜 Audit Log</button>
+      <button onclick="logout()">🚪 Logout</button>
+    </nav>
+  </aside>
+  <main class="ml-64 p-8">
+    <section id="overview"><h2>System Overview</h2></section>
+    <section id="admins" class="hidden"><h2>Admin Management (create, edit, delete)</h2></section>
+    <section id="families" class="hidden"><h2>Manage Families (full CRUD)</h2></section>
+    <section id="users" class="hidden"><h2>All Users (all roles)</h2></section>
+    <section id="audit" class="hidden"><h2>Audit Logs & Security</h2></section>
+  </main>
+  <script>
+    // Role checks, showSection logic here ...
+    function showSection(id) {
+      document.querySelectorAll('main section').forEach(s => s.classList.add('hidden'));
+      document.getElementById(id).classList.remove('hidden');
+    }
+  </script>
+</body>
+</html>
+
