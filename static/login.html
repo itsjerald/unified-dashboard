@@ -4,20 +4,18 @@
   <meta charset="utf-8">
   <title>Login</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 
-<body class="bg-gray-50 text-gray-800 dark:bg-gray-900 dark:text-gray-200 flex flex-col items-center justify-center h-screen">
+<body class="bg-gray-50 text-gray-800 dark:bg-gray-900 dark:text-gray-200 flex flex-col items-center justify-center min-h-screen">
 
   <div class="p-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg w-80">
     <h2 class="text-xl font-semibold mb-4 text-center">🔐 Login</h2>
 
     <form id="loginForm" class="flex flex-col gap-3" novalidate>
-      <input id="email" type="text" placeholder="Email (e.g. admin@example.com)"
-             class="border p-2 rounded dark:bg-gray-700 dark:border-gray-600" required>
-      <input id="password" type="password" placeholder="Password"
-             class="border p-2 rounded dark:bg-gray-700 dark:border-gray-600" required>
-      <button type="submit"
-              class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+      <input id="email" type="text" placeholder="Email" class="border p-2 rounded dark:bg-gray-700 dark:border-gray-600" required>
+      <input id="password" type="password" placeholder="Password" class="border p-2 rounded dark:bg-gray-700 dark:border-gray-600" required>
+      <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
         Login
       </button>
     </form>
@@ -31,21 +29,31 @@
   </div>
 
   <script>
-    // ✅ Redirect if already logged in
+    async function redirectByRole(user) {
+      if (user.first_login) {
+        window.location.href = "/change-password.html";
+      } else if (user.role === "superadmin") {
+        window.location.href = "/dashboard-superadmin.html";
+      } else if (user.role === "admin") {
+        window.location.href = "/dashboard-admin.html";
+      } else if (user.role === "parent" || user.role === "spouse") {
+        window.location.href = "/dashboard-parent.html";
+      } else if (user.role === "child") {
+        window.location.href = "/dashboard-child.html";
+      } else {
+        window.location.href = "/dashboard.html";
+      }
+    }
+
     async function checkSession() {
       const res = await fetch("/auth/me", { credentials: "include" });
       const user = await res.json();
       if (user.authenticated) {
-        if (user.first_login) {
-          window.location.href = "/change-password.html";
-        } else {
-          window.location.href = "/dashboard.html";
-        }
+        redirectByRole(user);
       }
     }
     checkSession();
 
-    // ✅ Handle login
     document.getElementById("loginForm").addEventListener("submit", async (e) => {
       e.preventDefault();
 
@@ -73,12 +81,10 @@
           return;
         }
 
-        // ✅ Redirect based on backend cookie
-        if (document.cookie.includes("force_change_pw=1")) {
-          window.location.href = "/change-password.html";
-        } else {
-          window.location.href = "/dashboard.html";
-        }
+        // Get role and redirect
+        const meRes = await fetch("/auth/me", { credentials: "include" });
+        const user = await meRes.json();
+        redirectByRole(user);
       } catch (err) {
         out.textContent = "⚠️ Network error. Try again.";
       }

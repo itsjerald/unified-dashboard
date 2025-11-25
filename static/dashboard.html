@@ -1,10 +1,72 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>$Title$</title>
+  <meta charset="utf-8">
+  <title>Unified Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>
+    // Dark mode: use system preference or localStorage
+    if (localStorage.theme === "dark" ||
+        (!("theme" in localStorage) && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  </script>
 </head>
-<body>
-$END$
+<body class="bg-gray-100 text-gray-900 dark:bg-gray-900 dark:text-gray-100 flex items-center justify-center min-h-screen">
+
+  <div class="bg-white dark:bg-gray-800 rounded shadow-xl p-8 w-full max-w-lg flex flex-col items-center">
+    <h2 class="text-2xl font-bold mb-2 text-center">👋 Welcome to Your Dashboard</h2>
+    <div id="userInfo" class="mb-6 w-full text-center text-lg"></div>
+
+    <div class="my-6 flex flex-col space-y-3 items-center w-full">
+      <a href="/dashboard-superadmin.html" class="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2 rounded transition w-full text-center">Superadmin Dashboard</a>
+      <a href="/dashboard-admin.html" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded transition w-full text-center">Admin Dashboard</a>
+      <a href="/dashboard-parent.html" class="bg-green-600 hover:bg-green-700 text-white px-5 py-2 rounded transition w-full text-center">Parent Dashboard</a>
+      <a href="/dashboard-child.html" class="bg-yellow-500 hover:bg-yellow-600 text-gray-900 px-5 py-2 rounded transition w-full text-center">Child Dashboard</a>
+    </div>
+
+    <button class="mt-8 bg-red-600 hover:bg-red-800 text-white px-4 py-2 rounded transition" onclick="logout()">Logout</button>
+    <div id="logoutMsg" class="text-center text-green-600 my-3 hidden">Logged out. Redirecting...</div>
+  </div>
+
+  <script>
+    // Fetch and display user role/email
+    async function loadUserInfo() {
+      const div = document.getElementById("userInfo");
+      try {
+        const res = await fetch("/auth/me", { credentials: "include" });
+        if (!res.ok) {
+          div.innerHTML = `<span class="text-red-500">Unable to fetch user info.</span>`;
+          return;
+        }
+        const user = await res.json();
+        if (!user.authenticated) {
+          div.innerHTML = `<span class="text-red-500">Not logged in.</span>`;
+          setTimeout(() => window.location.href = '/login.html', 1000);
+          return;
+        }
+        div.innerHTML = `
+          Logged in as <b>${user.email || "Unknown"}</b>
+          <br>
+          <span class="font-semibold">Role:</span> <span class="bg-gray-200 dark:bg-gray-700 text-blue-700 dark:text-blue-200 rounded px-2 py-1">${user.role || "Unknown"}</span>
+        `;
+      } catch (err) {
+        div.innerHTML = `<span class="text-red-500">Error loading user info.</span>`;
+      }
+    }
+
+    async function logout() {
+      const msg = document.getElementById("logoutMsg");
+      await fetch("/auth/logout", { method: "POST", credentials: "include" });
+      msg.classList.remove("hidden");
+      setTimeout(() => window.location.href = "/login.html", 1000);
+    }
+
+    loadUserInfo();
+  </script>
 </body>
 </html>
