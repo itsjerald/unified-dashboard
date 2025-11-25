@@ -20,31 +20,31 @@ init_db()
 # ✅ Ensure CORS for cookies
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:9000", "http://localhost:9000"],
+    allow_origins=["http://127.0.0.1:8000", "http://localhost:8000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ✅ Create default admin
-def ensure_default_admin():
+# ✅ Create default superadmin (recommended)
+def ensure_default_superadmin():
     with Session(engine) as session:
-        admin_exists = session.exec(select(User).where(User.role == "admin")).first()
-        if not admin_exists:
-            pw_hash = argon2.hash("admin123")
-            admin = User(
-                email="admin@example.com",
+        superadmin_exists = session.exec(select(User).where(User.role == "superadmin")).first()
+        if not superadmin_exists:
+            pw_hash = argon2.hash("superadmin123")
+            superadmin = User(
+                email="superadmin@example.com",
                 password_hash=pw_hash,
-                role="admin",
+                role="superadmin",
                 first_login=True
             )
-            session.add(admin)
+            session.add(superadmin)
             session.commit()
-            print("✅ Default admin created: admin@example.com / admin123")
+            print("✅ Default superadmin created: superadmin@example.com / superadmin123")
         else:
-            print("🔸 Admin already exists")
+            print("🔸 Superadmin already exists")
 
-ensure_default_admin()
+ensure_default_superadmin()
 
 # ✅ Middleware for user context
 @app.middleware("http")
@@ -78,15 +78,30 @@ app.include_router(categories.router, prefix="/api/admin")
 app.include_router(rules.router, prefix="/api/admin")
 app.include_router(system.router, prefix="/api/admin")
 
-# ✅ Default route → redirect to login
+# ✅ Default route → redirect to correct dashboard based on role
 @app.get("/")
 async def root(request: Request):
     token = request.cookies.get("access_token")
     data = verify_token(token) if token else None
-    if data:
-        return RedirectResponse(url="/dashboard.html")
-    return RedirectResponse(url="/login.html")
 
+    if data:
+        user_id = int(data.get("sub"))
+        with Session(engine) as session:
+            user = session.get(User, user_id)
+            if user:
+                role = user.role
+                if role == "superadmin":
+                    return RedirectResponse(url="/dashboard-superadmin.html")
+                elif role == "admin":
+                    return RedirectResponse(url="/dashboard-admin.html")
+                elif role in ("parent", "spouse"):
+                    return RedirectResponse(url="/dashboard-parent.html")
+                elif role == "child":
+                    return RedirectResponse(url="/dashboard-child.html")
+                else:
+                    # fallback in case new/unknown role
+                    return RedirectResponse(url="/dashboard.html")
+    return RedirectResponse(url="/login.html")
 
 # ✅ Static files (keep last)
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

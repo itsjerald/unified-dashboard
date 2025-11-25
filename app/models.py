@@ -1,16 +1,20 @@
 from sqlmodel import SQLModel, Field, Column, JSON, Relationship
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
 
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     email: str = Field(index=True, nullable=False, unique=True)
     password_hash: str
     totp_secret: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    verification_token: Optional[str] = Field(default=None, index=True)
+    verification_expires_at: datetime = Field(default_factory=lambda: datetime.utcnow() + timedelta(days=7))
+    is_verified: bool = Field(default=False)
+    smtp_config: Optional[dict] = Field(default=None, sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     role: str = Field(default="user")
     first_login: bool = Field(default=True)
-    # ✅ NEW: family and parent
     family_id: Optional[int] = Field(default=None, foreign_key="family.id")
     parent_id: Optional[int] = Field(default=None, foreign_key="user.id")
 
@@ -38,7 +42,7 @@ class Transaction(SQLModel, table=True):
     note: Optional[str] = None
     paid: bool = False
     week_paid: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     category: str = Field(default="Other")
     type: str  # debit or credit
     description: str
@@ -54,11 +58,12 @@ class Payment(SQLModel, table=True):
     payee_id: int
     amount: float
     txn_refs: List[int] = Field(sa_column=Column(JSON), default=[])
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class Category(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str
+    family_id: Optional[int] = Field(default=None, foreign_key="family.id")
 
 class MerchantRule(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
@@ -69,10 +74,12 @@ class MerchantRule(SQLModel, table=True):
 class Family(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True, nullable=False, unique=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    smtp_config: Optional[dict] = Field(default=None, sa_column=Column(JSON))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     # Relationships
     members: List["User"] = Relationship(back_populates="family")
+    categories: List["Category"] = Relationship(back_populates="family")
 
 class TxnShareRequest(SQLModel):
     txn_ids: List[int]
@@ -83,5 +90,10 @@ class DeletionRequest(SQLModel, table=True):
     entity_id: int
     requested_by_id: int = Field(foreign_key="user.id")
     approval_ids: List[int] = Field(default_factory=list, sa_column=Column(JSON))
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     executed: bool = Field(default=False)
+
+class VerificationResendLog(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    email: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

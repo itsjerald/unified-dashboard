@@ -1,15 +1,22 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
+from fastapi import APIRouter, HTTPException, Response, Request
 from pydantic import BaseModel, EmailStr
 from app.db import engine
-from app.models import User
+from app.utils.email import get_family_smtp
+from app.models import User, Family, VerificationResendLog
 from sqlmodel import Session, select
 from passlib.hash import argon2
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 import os
 import pyotp
+import secrets
+import smtplib, ssl
+from email.message import EmailMessage
+
+from app.settings import DEFAULT_SMTP
 
 router = APIRouter()
+VALID_ROLES = ["superadmin", "admin", "parent", "child", "spouse", "user"]
 
 SECRET_KEY = os.environ.get('SECRET_KEY', 'change-me-in-prod')
 ALGORITHM = 'HS256'
@@ -28,6 +35,12 @@ class LoginIn(BaseModel):
 class ChangePasswordIn(BaseModel):
     old_password: str
     new_password: str
+
+def generate_token(length: int = 32) -> str:
+    """
+    Generate a secure random token for email verification.
+    """
+    return secrets.token_urlsafe(length)
 
 @router.post('/change-password')
 def change_password(request: Request, payload: ChangePasswordIn):
@@ -85,11 +98,11 @@ def register(request: Request, payload: RegisterIn):
             raise HTTPException(status_code=400, detail='Email already exists')
 
         pw_hash = hash_password(payload.password)
-
         new_user = User(
             email=payload.email,
             password_hash=pw_hash,
-            role=payload.role if payload.role in ["admin", "user"] else "user",
+            role=payload.role if payload.role in ["admin", "superadmin", "parent", "child", "spouse",
+                                                  "user"] else "user",
             first_login=True
         )
 
@@ -200,7 +213,7 @@ def signup(payload: RegisterIn):
     """
     Public signup endpoint.
     Normal users can self-register.
-    First user creation (admin) handled separately in main.py.
+    Sends verification email. User must verify within 7 days.
     """
     with Session(engine) as session:
         existing = session.exec(select(User).where(User.email == payload.email)).first()
@@ -208,16 +221,163 @@ def signup(payload: RegisterIn):
             raise HTTPException(status_code=400, detail="Email already exists")
 
         pw_hash = hash_password(payload.password)
+        token = generate_token()
+        expires_at = datetime.utcnow() + timedelta(days=7)
+
+        smtp_cfg = DEFAULT_SMTP
 
         new_user = User(
             email=payload.email,
             password_hash=pw_hash,
-            role="user",          # Always user for public signup
-            first_login=True
+            role=payload.role if payload.role in ["parent", "child", "spouse", "user"] else "user",
+            first_login=True,
+            is_verified=False,
+            verification_token=token,
+            created_at=datetime.utcnow(),
+            verification_expires_at=expires_at
         )
 
+        # If family_id set, use family's smtp
+        if new_user.family_id:
+            smtp_cfg = get_family_smtp(new_user.family_id)
+
+        # Only create/save user after email is sent
+        send_verification_email(payload.email, token, smtp_cfg)
         session.add(new_user)
         session.commit()
         session.refresh(new_user)
 
-        return {"message": "Account created successfully. Please login.", "redirect": "/login.html"}
+        return {"message": "Account created. Check your email to verify!", "redirect": "/login.html"}
+
+
+def send_verification_email(email: str, token: str, smtp_cfg: dict):
+    try:
+        msg = EmailMessage()
+        msg["Subject"] = "Verify your FamilyApp account"
+        msg["From"] = smtp_cfg['EMAIL_USER']
+        msg["To"] = email
+        APP_HOST_URL = os.environ.get('APP_HOST_URL', 'http://localhost:8000')
+        verify_url = f"{APP_HOST_URL}/auth/verify?token={token}"
+        msg.set_content(f"Welcome! Please verify your account: {verify_url}")
+
+        context = ssl.create_default_context()
+        with smtplib.SMTP_SSL(smtp_cfg['EMAIL_HOST'], smtp_cfg['EMAIL_PORT'], context=context) as server:
+            server.login(smtp_cfg['EMAIL_USER'], smtp_cfg['EMAIL_PASS'])
+            server.send_message(msg)
+    except Exception as e:
+        print(f"Email sending failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to send verification email. Please try again.")
+
+
+@router.post('/admin/invite_superadmin')
+def invite_superadmin(email: EmailStr, request: Request):
+    # Only default admin or verified superadmins allowed
+    inviter = get_current_user(request)
+    if inviter.role not in ["admin", "superadmin"]:
+        raise HTTPException(status_code=403)
+    token = generate_token()
+    expires_at = datetime.utcnow() + timedelta(days=7)
+    user = User(
+        email=email,
+        role="superadmin",
+        first_login=True,
+        is_verified=False,
+        verification_token=token,
+        created_at=datetime.utcnow(),
+        verification_expires_at=expires_at
+    )
+
+    with Session(engine) as session:
+        session.add(user)
+        session.commit()
+    send_verification_email(email, token, smtp_config=DEFAULT_SMTP)
+    return {"message": "Superadmin invited. Must verify within 7 days."}
+
+def cleanup_unverified_accounts():
+    seven_days_ago = datetime.utcnow() - timedelta(days=7)
+    with Session(engine) as session:
+        # Find unverified users
+        unverified = session.exec(select(User).where(User.is_verified == False, User.created_at < seven_days_ago)).all()
+        for user in unverified:
+            if user.role == "parent" and user.family_id:
+                # Delete entire family and cascade to spouses, children, transactions
+                family = session.get(Family, user.family_id)
+                if family:
+                    session.delete(family)
+            else:
+                # Delete user; cascade set on relationships deletes transactions, children, etc.
+                session.delete(user)
+        session.commit()
+
+MAX_RESENDS_PER_DAY = 7
+@router.post('/auth/resend-verification')
+def resend_verification(email: EmailStr):
+    now = datetime.utcnow()
+    start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_of_day = start_of_day + timedelta(days=1)
+    with Session(engine) as session:
+        count_today = session.exec(
+            select(VerificationResendLog)
+            .where(
+                VerificationResendLog.email == email,
+                VerificationResendLog.sent_at >= start_of_day,
+                VerificationResendLog.sent_at < end_of_day
+            )
+        ).count()
+        if count_today >= MAX_RESENDS_PER_DAY:
+            raise HTTPException(status_code=429, detail="Too many resend attempts for today. Try tomorrow.")
+
+        user = session.exec(select(User).where(User.email == email)).first()
+        if not user or user.is_verified:
+            raise HTTPException(status_code=400, detail="No unverified account for this email.")
+        # always issue a fresh expiry for a new token
+        token = generate_token()
+        expires_at = now + timedelta(days=7)
+        send_verification_email(email, token, DEFAULT_SMTP)  # <-- fail early if can't
+        user.verification_token = token
+        user.verification_expires_at = expires_at
+        session.add(user)
+        # Log this send
+        session.add(VerificationResendLog(email=email, sent_at=now))
+        session.commit()
+    return {"message": "Verification email resent."}
+
+def get_valid_role(requested_role: str, default: str = "user"):
+    return requested_role if requested_role in VALID_ROLES else default
+
+@router.post('/admin/invite_user')
+def invite_user(
+    email: EmailStr,
+    role: str,
+    request: Request
+):
+    inviter = get_current_user(request)
+    # Only admin or superadmin can invite any role
+    if inviter.role not in ["admin", "superadmin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if role not in VALID_ROLES:
+        raise HTTPException(status_code=400, detail=f"Invalid role: {role}")
+    token = generate_token()
+    expires_at = datetime.utcnow() + timedelta(days=7)
+
+    with Session(engine) as session:
+        # Prevent duplicate emails
+        existing = session.exec(select(User).where(User.email == email)).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Email already exists.")
+
+        user = User(
+            email=email,
+            role=role,
+            first_login=True,
+            is_verified=False,
+            verification_token=token,
+            created_at=datetime.utcnow(),
+            verification_expires_at=expires_at
+        )
+        session.add(user)
+        session.commit()
+
+    # Send verification (adapt as needed)
+    send_verification_email(email, token, smtp_cfg=DEFAULT_SMTP)
+    return {"message": f"{role.capitalize()} invited. Must verify within 7 days."}
