@@ -37,3 +37,5 @@ dist/
 
 # __pycache__ inside app folders
 app/**/__pycache__/
+__pycache__/
+*.pyc
