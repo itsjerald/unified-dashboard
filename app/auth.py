@@ -1,6 +1,6 @@
-from fastapi import APIRouter, HTTPException, Response, Request
+from fastapi import APIRouter, HTTPException, Response, Request, Depends
 from pydantic import BaseModel, EmailStr
-from app.db import engine
+from app.db import engine, get_session
 from app.utils.email import get_family_smtp
 from app.models import User, Family, VerificationResendLog
 from sqlmodel import Session, select
@@ -381,3 +381,53 @@ def invite_user(
     # Send verification (adapt as needed)
     send_verification_email(email, token, smtp_cfg=DEFAULT_SMTP)
     return {"message": f"{role.capitalize()} invited. Must verify within 7 days."}
+
+from fastapi.responses import HTMLResponse
+
+@router.get("/verify", response_class=HTMLResponse)
+def verify_email(token: str, session: Session = Depends(get_session)):
+    user = session.exec(select(User).where(User.verification_token == token)).first()
+    if not user:
+        # Show error or redirect to login as fallback
+        return HTMLResponse(
+            content="<script>window.location='/login.html';</script>",
+            status_code=404
+        )
+    user.is_verified = True
+    user.verification_token = None
+    session.add(user)
+    session.commit()
+    # After verification, redirect to login (not dashboard!) after 2 seconds
+    return HTMLResponse(
+        content=f"""
+            <html>
+            <head>
+                <meta http-equiv="refresh" content="2; url=/login.html" />
+                <title>Email Verified</title>
+                <style>
+                  body {{ background: #f3f4f6; font-family: sans-serif; }}
+                  .card {{
+                    max-width: 410px; margin: 120px auto; padding: 2rem 1.5rem;
+                    background: #fff; border-radius: 8px; text-align: center;
+                    box-shadow:0 3px 12px 0 rgba(37, 99, 235, 0.08);
+                  }}
+                  .btn {{
+                    display:inline-block; margin-top:1.5rem; padding:12px 30px;
+                    background:#2563eb;color:#fff;text-decoration:none;border-radius:5px;font-weight:bold;
+                  }}
+                </style>
+            </head>
+            <body>
+              <div class="card">
+                <h2 style="color:#22c55e;">✅ Email Verified!</h2>
+                <p>Hi <b>{user.email}</b>, <br>your email is now verified.</p>
+                <p>Redirecting to login page...</p>
+                <a href='/login.html' class="btn">Go to Login</a>
+              </div>
+              <script>
+                setTimeout(() => window.location='/login.html', 2000);
+              </script>
+            </body>
+            </html>
+        """,
+    )

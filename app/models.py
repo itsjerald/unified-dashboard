@@ -64,6 +64,7 @@ class Category(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str
     family_id: Optional[int] = Field(default=None, foreign_key="family.id")
+    family: Optional["Family"] = Relationship(back_populates="categories")
 
 class MerchantRule(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
